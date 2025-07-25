@@ -6,13 +6,13 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/vmware/go-vcloud-director/v2/govcd"
+	"github.com/vmware/go-vcloud-director/v3/govcd"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
-	"github.com/vmware/go-vcloud-director/v2/util"
+	"github.com/vmware/go-vcloud-director/v3/util"
 )
 
 // BuildVersion holds version which is meant to be injected at build time using ldflags
@@ -168,6 +168,31 @@ var globalDataSourceMap = map[string]*schema.Resource{
 	"vcloud_dse_solution_publish":                         datasourceVcdDsePublish(),                              // 3.13
 	"vcloud_org_oidc":                                     datasourceVcdOrgOidc(),                                 // 3.13
 	"vcloud_org_vdc_template":                             datasourceVcdOrgVdcTemplate(),                          // 3.13
+	"vcloud_external_endpoint":                            	datasourceVcdExternalEndpoint(),                        // 3.14
+	"vcloud_api_filter":                                   	datasourceVcdApiFilter(),                               // 3.14
+	"vcloud_nsxt_tier0_router_interface":                  	datasourceVcdNsxtTier0RouterInterface(),                // 3.14
+	"vcloud_catalog_access_control":                       	datasourceVcdCatalogAccessControl(),                    // 3.14
+	"vcloud_nsxt_alb_virtual_service_http_req_rules":      	datasourceVcdAlbVirtualServiceReqRules(),               // 3.14
+	"vcloud_nsxt_alb_virtual_service_http_resp_rules":     	datasourceVcdAlbVirtualServiceRespRules(),              // 3.14
+	"vcloud_nsxt_alb_virtual_service_http_sec_rules":      	datasourceVcdAlbVirtualServiceSecRules(),               // 3.14
+	// Unknown use for vcd_tm: No documentation 
+	"vcloud_tm_org":                                       	datasourceVcdTmOrg(),                                   // 4.0
+	"vcloud_tm_region_storage_policy":                     	datasourceVcdTmRegionStoragePolicy(),                   // 4.0
+	"vcloud_tm_storage_class":                             	datasourceVcdTmStorageClass(),                          // 4.0
+	"vcloud_tm_content_library":                           	datasourceVcdTmContentLibrary(),                        // 4.0
+	"vcloud_tm_supervisor":                                	datasourceVcdTmSupervisor(),                            // 4.0
+	"vcloud_tm_supervisor_zone":                           	datasourceVcdTmSupervisorZone(),                        // 4.0
+	"vcloud_tm_region":                                    	datasourceVcdTmRegion(),                                // 4.0
+	"vcloud_tm_org_vdc":                                   	datasourceVcdTmOrgVdc(),                                // 4.0
+	"vcloud_tm_region_zone":                               	datasourceVcdTmRegionZone(),                            // 4.0
+	"vcloud_tm_nsxt_manager":                              	datasourceVcdTmNsxtManager(),                           // 4.0
+	"vcloud_tm_vcenter":                                   	datasourceVcdTmVcenter(),                               // 4.0
+	"vcloud_tm_content_library_item":                      	datasourceVcdTmContentLibraryItem(),                    // 4.0
+	"vcloud_tm_ip_space":                                  	datasourceVcdTmIpSpace(),                               // 4.0
+	"vcloud_tm_tier0_gateway":                             	datasourceVcdTmTier0Gateway(),                          // 4.0
+	"vcloud_tm_provider_gateway":                          	datasourceVcdTmProviderGateway(),                       // 4.0
+	"vcloud_tm_edge_cluster":                              	datasourceVcdTmEdgeCluster(),                           // 4.0
+	"vcloud_tm_edge_cluster_qos":                          	datasourceVcdTmEdgeClusterQos(),                        // 4.0
 }
 
 var globalResourceMap = map[string]*schema.Resource{
@@ -289,6 +314,22 @@ var globalResourceMap = map[string]*schema.Resource{
 	"vcloud_org_oidc":                                     resourceVcdOrgOidc(),                                 // 3.13
 	"vcloud_org_vdc_template":                             resourceVcdOrgVdcTemplate(),                          // 3.13
 	"vcloud_org_vdc_template_instance":                    resourceVcdOrgVdcTemplateInstance(),                  // 3.13
+	"vcloud_external_endpoint":                            	resourceVcdExternalEndpoint(),                        // 3.14
+	"vcloud_api_filter":                                   	resourceVcdApiFilter(),                               // 3.14
+	"vcloud_nsxt_alb_virtual_service_http_req_rules":      	resourceVcdAlbVirtualServiceReqRules(),               // 3.14
+	"vcloud_nsxt_alb_virtual_service_http_resp_rules":     	resourceVcdAlbVirtualServiceRespRules(),              // 3.14
+	"vcloud_nsxt_alb_virtual_service_http_sec_rules":      	resourceVcdAlbVirtualServiceSecRules(),               // 3.14
+	// Unknown use for vcd_tm: No documentation 
+	"vcloud_tm_content_library":                           	resourceVcdTmContentLibrary(),                        // 4.0
+	"vcloud_tm_nsxt_manager":                              	resourceVcdTmNsxtManager(),                           // 4.0
+	"vcloud_tm_vcenter":                                   	resourceVcdTmVcenter(),                               // 4.0
+	"vcloud_tm_content_library_item":                      	resourceVcdTmContentLibraryItem(),                    // 4.0
+	"vcloud_tm_org":                                       	resourceVcdTmOrg(),                                   // 4.0
+	"vcloud_tm_region":                                    	resourceVcdTmRegion(),                                // 4.0
+	"vcloud_tm_org_vdc":                                   	resourceTmOrgVdc(),                                   // 4.0
+	"vcloud_tm_ip_space":                                  	resourceVcdTmIpSpace(),                               // 4.0
+	"vcloud_tm_provider_gateway":                          	resourceVcdTmProviderGateway(),                       // 4.0
+	"vcloud_tm_edge_cluster_qos":                          	resourceVcdTmEdgeClusterQos(),                        // 4.0
 }
 
 // Provider returns a terraform.ResourceProvider.
@@ -322,6 +363,12 @@ func Provider() *schema.Provider {
 				Optional:    true,
 				DefaultFunc: schema.EnvDefaultFunc("VCLOUD_SAML_ADFS_RPT_ID", nil),
 				Description: "Allows to specify custom Relaying Party Trust Identifier for auth_type=saml_adfs",
+			},
+			"saml_adfs_cookie": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("VCLOUD_SAML_ADFS_COOKIE", nil),
+				Description: "Allows to specify custom cookie for ADFS server lookup. '{{.Org}}' is replaced by real Org -  e.g. 'sso-preferred=yes; sso_redirect_org={{.Org}}'",
 			},
 
 			"token": {
@@ -472,6 +519,7 @@ func providerConfigure(_ context.Context, d *schema.ResourceData) (interface{}, 
 	case "saml_adfs":
 		config.UseSamlAdfs = true
 		config.CustomAdfsRptId = d.Get("saml_adfs_rpt_id").(string)
+		config.CustomAdfsCookie = d.Get("saml_adfs_cookie").(string)
 	case "token":
 		if config.Token == "" {
 			return nil, diag.Errorf("empty token detected with 'auth_type' == 'token'")

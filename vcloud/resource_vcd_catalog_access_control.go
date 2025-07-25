@@ -3,14 +3,15 @@ package vcloud
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
-	"github.com/vmware/go-vcloud-director/v2/govcd"
-	"github.com/vmware/go-vcloud-director/v2/types/v56"
-	"github.com/vmware/go-vcloud-director/v2/util"
-	"strings"
-	"time"
+	"github.com/vmware/go-vcloud-director/v3/govcd"
+	"github.com/vmware/go-vcloud-director/v3/types/v56"
+	"github.com/vmware/go-vcloud-director/v3/util"
 )
 
 func resourceVcdCatalogAccessControl() *schema.Resource {
@@ -157,9 +158,11 @@ func resourceVcdCatalogAccessControlCreateUpdate(ctx context.Context, d *schema.
 			var err error
 			if readOnlySharedwithOtherOrgs {
 				err = catalog.SetReadOnlyAccessControl(true)
-			} else {
-				err = catalog.SetAccessControl(&accessControlParams, true)
+				if err != nil {
+					return nil, err
+				}
 			}
+			err = catalog.SetAccessControl(&accessControlParams, true)
 			return nil, err
 		})
 	if err != nil {
@@ -169,8 +172,11 @@ func resourceVcdCatalogAccessControlCreateUpdate(ctx context.Context, d *schema.
 	d.SetId(catalog.AdminCatalog.ID)
 	return resourceVcdCatalogAccessControlRead(ctx, d, meta)
 }
+func resourceVcdCatalogAccessControlRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	return genericVcdCatalogAccessControlRead(ctx, d, meta, "resource")
+}
 
-func resourceVcdCatalogAccessControlRead(_ context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func genericVcdCatalogAccessControlRead(_ context.Context, d *schema.ResourceData, meta interface{}, origin string) diag.Diagnostics {
 	vcdClient := meta.(*VCDClient)
 	sessionInfo, err := vcdClient.Client.GetSessionInfo()
 	if err != nil {
@@ -182,9 +188,13 @@ func resourceVcdCatalogAccessControlRead(_ context.Context, d *schema.ResourceDa
 		return diag.Errorf("%s error while reading Org - %s", sessionText, err)
 	}
 
-	catalog, err := org.GetCatalogById(d.Id(), false)
+	catalogId := d.Id()
+	if catalogId == "" {
+		catalogId = d.Get("catalog_id").(string)
+	}
+	catalog, err := org.GetCatalogById(catalogId, false)
 	if err != nil {
-		if govcd.IsNotFound(err) {
+		if govcd.IsNotFound(err) && origin == "resource" {
 			d.SetId("")
 			return nil
 		} else {
@@ -242,6 +252,7 @@ func resourceVcdCatalogAccessControlRead(_ context.Context, d *schema.ResourceDa
 		}
 	}
 
+	d.SetId(catalogId)
 	return nil
 }
 

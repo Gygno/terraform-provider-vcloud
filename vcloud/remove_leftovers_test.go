@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/vmware/go-vcloud-director/v2/govcd"
-	"github.com/vmware/go-vcloud-director/v2/types/v56"
+	"github.com/vmware/go-vcloud-director/v3/govcd"
+	"github.com/vmware/go-vcloud-director/v3/types/v56"
 )
 
 // This file contains routines that clean up the test suite after failed tests
@@ -57,6 +57,9 @@ var alsoDelete = entityList{
 	{Type: "vcd_catalog", Name: "Catalog-AC-2", Comment: "from vcd.TestAccVcdCatalogAccessControl-update.tf: Catalog-AC-2"},
 	{Type: "vcd_catalog", Name: "Catalog-AC-3", Comment: "from vcd.TestAccVcdCatalogAccessControl-update.tf: Catalog-AC-3"},
 	{Type: "vcd_catalog", Name: "Catalog-AC-4", Comment: "from vcd.TestAccVcdCatalogAccessControl-update.tf: Catalog-AC-4"},
+	{Type: "vcd_org_user", Name: "ac-user1", Comment: "from vcd.TestAccVcdCatalogAccessControl-update.tf: ac-user1"},
+	{Type: "vcd_org_user", Name: "ac-user2", Comment: "from vcd.TestAccVcdCatalogAccessControl-update.tf: ac-user2"},
+	{Type: "vcd_org_user", Name: "ac-user3", Comment: "from vcd.TestAccVcdCatalogAccessControl-update.tf: ac-user3"},
 	{Type: "vcd_org", Name: "datacloud-clone", Comment: "from vcd.TestAccVcdDatasourceOrg.tf: datacloud-clone"},
 	{Type: "vcd_network", Name: "direct-net", Comment: "from vcd.TestAccVcdExternalNetworkV2NsxtSegmentIntegration-step2.tf: direct-net"},
 	{Type: "vcd_network", Name: "nsxt-routed-test-initial", Comment: "from vcd.TestAccVcdNetworkRoutedV2Nsxt.tf: nsxt-routed-test-initial"},
@@ -109,6 +112,11 @@ var alwaysShow = []string{
 func removeLeftovers(govcdClient *govcd.VCDClient, verbose bool) error {
 	if verbose {
 		fmt.Printf("Start leftovers removal\n")
+	}
+
+	if govcdClient.Client.IsTm() {
+		fmt.Printf("Skipping leftover removal for TM\n")
+		return nil
 	}
 
 	// NSX-T ALB configuration Hierarchical cleanup is separate from main hierarchy as even if the
@@ -498,7 +506,49 @@ func removeLeftovers(govcdClient *govcd.VCDClient, verbose bool) error {
 			}
 		}
 	}
+	// --------------------------------------------------------------
+	// API Filters
+	// --------------------------------------------------------------
 
+	if govcdClient.Client.IsSysAdmin && govcdClient.Client.APIVCDMaxVersionIs(">= 37.3") {
+		apiFilters, err := govcdClient.GetAllApiFilters(nil)
+		if err != nil {
+			return fmt.Errorf("error retrieving API Filters: %s", err)
+		}
+		for _, af := range apiFilters {
+			name := ""
+			// As API Filters don't have names nor identifiers, we check the URL Pattern to have the test keyword. If that's the case
+			// we trick the "shouldDeleteEntity" function to always consider it for deletion by hardcoding the "Test" name
+			if af.ApiFilter.UrlMatcher != nil && strings.Contains(af.ApiFilter.UrlMatcher.UrlPattern, "test") {
+				name = "Test"
+			}
+			toBeDeleted := shouldDeleteEntity(alsoDelete, doNotDelete, name, "vcd_api_filter", 1, verbose)
+			if toBeDeleted {
+				err = deleteApiFilter(af)
+				if err != nil {
+					return fmt.Errorf("error deleting API Filter '%s': %s", af.ApiFilter.ID, err)
+				}
+			}
+		}
+	}
+	// --------------------------------------------------------------
+	// External Endpoints
+	// --------------------------------------------------------------
+	if govcdClient.Client.IsSysAdmin && govcdClient.Client.APIVCDMaxVersionIs(">= 37.3") {
+		externalEndpoints, err := govcdClient.GetAllExternalEndpoints(nil)
+		if err != nil {
+			return fmt.Errorf("error retrieving External Endpoints: %s", err)
+		}
+		for _, ep := range externalEndpoints {
+			toBeDeleted := shouldDeleteEntity(alsoDelete, doNotDelete, ep.ExternalEndpoint.Name, "vcd_external_endpoint", 1, verbose)
+			if toBeDeleted {
+				err = deleteExternalEndpoint(ep)
+				if err != nil {
+					return fmt.Errorf("error deleting External Endpoint '%s': %s", ep.ExternalEndpoint.ID, err)
+				}
+			}
+		}
+	}
 	// --------------------------------------------------------------
 	// External Networks and Provider Gateways (only for SysAdmin)
 	// --------------------------------------------------------------
@@ -1046,6 +1096,46 @@ func deleteRdeInterface(di *govcd.DefinedInterface) error {
 	err := di.Delete()
 	if err != nil {
 		return fmt.Errorf("error deleting RDE Interface '%s': %s", di.DefinedInterface.ID, err)
+	}
+	return nil
+}
+
+func deleteExternalEndpoint(ep *govcd.ExternalEndpoint) error {
+	// This prevents an early error if attempting to remove an External Endpoint that contains an illegal
+	// character in the name, which will fail and interrupt the removal process.
+	if strings.Contains(ep.ExternalEndpoint.Name, ".") {
+		fmt.Printf("\t\t CANNOT REMOVE EXTERNAL ENDPOINT %s, contains illegal characters\n", ep.ExternalEndpoint.ID)
+		return nil
+	}
+
+	fmt.Printf("\t\t REMOVING EXTERNAL ENDPOINT %s\n", ep.ExternalEndpoint.ID)
+
+	// Endpoint must be disabled first
+	err := ep.Update(types.ExternalEndpoint{
+		Name:        ep.ExternalEndpoint.Name,
+		ID:          ep.ExternalEndpoint.ID,
+		Version:     ep.ExternalEndpoint.Version,
+		Vendor:      ep.ExternalEndpoint.Vendor,
+		Enabled:     false,
+		Description: ep.ExternalEndpoint.Description,
+		RootUrl:     ep.ExternalEndpoint.RootUrl,
+	})
+	if err != nil {
+		return fmt.Errorf("error disabling External Endpoint '%s': %s", ep.ExternalEndpoint.ID, err)
+	}
+	err = ep.Delete()
+	if err != nil {
+		return fmt.Errorf("error deleting External Endpoint '%s': %s", ep.ExternalEndpoint.ID, err)
+	}
+	return nil
+}
+
+func deleteApiFilter(af *govcd.ApiFilter) error {
+	fmt.Printf("\t\t REMOVING API FILTER %s\n", af.ApiFilter.ID)
+
+	err := af.Delete()
+	if err != nil {
+		return fmt.Errorf("error deleting API Filter '%s': %s", af.ApiFilter.ID, err)
 	}
 	return nil
 }

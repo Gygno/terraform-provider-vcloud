@@ -7,10 +7,11 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/vmware/go-vcloud-director/v2/types/v56"
+	"github.com/vmware/go-vcloud-director/v3/types/v56"
 )
 
 func expandIPRange(configured []interface{}) (types.IPRanges, error) {
@@ -83,6 +84,16 @@ func convertSchemaSetToSliceOfStrings(param *schema.Set) []string {
 	return result
 }
 
+func convertSchemaSetToSliceOfInts(param *schema.Set) []int {
+	paramList := param.List()
+	result := make([]int, len(paramList))
+	for index, value := range paramList {
+		result[index] = value.(int)
+	}
+
+	return result
+}
+
 // convertTypeListToSliceOfStrings accepts Terraform's TypeList structure `[]interface{}` and
 // converts it to slice of strings.
 func convertTypeListToSliceOfStrings(param []interface{}) []string {
@@ -102,6 +113,16 @@ func convertStringsToTypeSet(param []string) *schema.Set {
 	}
 
 	set := schema.NewSet(schema.HashSchema(&schema.Schema{Type: schema.TypeString}), sliceOfInterfaces)
+	return set
+}
+
+func convertIntsToTypeSet(param []int) *schema.Set {
+	sliceOfInterfaces := make([]interface{}, len(param))
+	for index, value := range param {
+		sliceOfInterfaces[index] = value
+	}
+
+	set := schema.NewSet(schema.HashSchema(&schema.Schema{Type: schema.TypeInt}), sliceOfInterfaces)
 	return set
 }
 
@@ -365,4 +386,12 @@ func firstNonEmpty(args ...string) string {
 		}
 	}
 	return ""
+}
+
+func mustStrToInt(s string) int {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		panic(fmt.Sprintf("failed converting '%s' to int: %s", s, err))
+	}
+	return v
 }

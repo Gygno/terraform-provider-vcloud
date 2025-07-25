@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/vmware/go-vcloud-director/v2/govcd"
+	"github.com/vmware/go-vcloud-director/v3/govcd"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
@@ -35,6 +35,10 @@ func TestAccDataSourceNotFound(t *testing.T) {
 
 func testSpecificDataSourceNotFound(dataSourceName string, vcdClient *VCDClient) func(*testing.T) {
 	return func(t *testing.T) {
+
+		if !vcdClient.Client.IsTm() && strings.HasPrefix(dataSourceName, "vcd_tm") {
+			t.Skipf("Skipping %s datasource not found test on VCD", dataSourceName)
+		}
 
 		type skipAlways struct {
 			dataSourceName string
@@ -132,6 +136,30 @@ func testSpecificDataSourceNotFound(dataSourceName string, vcdClient *VCDClient)
 				skipVersionConstraint: "< 37.1",
 				datasourceName:        "vcd_ip_space_custom_quota",
 			},
+			{
+				skipVersionConstraint: "< 38.1",
+				datasourceName:        "vcd_external_endpoint",
+			},
+			{
+				skipVersionConstraint: "< 38.1",
+				datasourceName:        "vcd_api_filter",
+			},
+			{
+				skipVersionConstraint: "< 38.0",
+				datasourceName:        "vcd_nsxt_alb_virtual_service_http_req_rules",
+			},
+			{
+				skipVersionConstraint: "< 38.0",
+				datasourceName:        "vcd_nsxt_alb_virtual_service_http_resp_rules",
+			},
+			{
+				skipVersionConstraint: "< 38.0",
+				datasourceName:        "vcd_nsxt_alb_virtual_service_http_sec_rules",
+			},
+			{
+				skipVersionConstraint: "< 38.0",
+				datasourceName:        "vcd_nsxt_tier0_router_interface",
+			},
 		}
 		// urn:vcloud:ipSpace:2ec12e23-6911-4950-a33f-5602ae72ced2
 
@@ -178,6 +206,9 @@ func testSpecificDataSourceNotFound(dataSourceName string, vcdClient *VCDClient)
 			"vcd_solution_add_on",
 			"vcd_solution_add_on_instance",
 			"vcd_solution_add_on_instance_publish",
+			"vcd_external_endpoint",
+			"vcd_api_filter",
+			"vcd_nsxt_tier0_router_interface",
 		}
 		dataSourcesRequiringAlbConfig := []string{
 			"vcd_nsxt_alb_cloud",
@@ -318,6 +349,14 @@ func addMandatoryParams(dataSourceName string, mandatoryFields []string, t *test
 			return templateFields
 		}
 
+		if (dataSourceName == "vcd_nsxt_alb_virtual_service_http_req_rules" ||
+			dataSourceName == "vcd_nsxt_alb_virtual_service_http_resp_rules" ||
+			dataSourceName == "vcd_nsxt_alb_virtual_service_http_sec_rules") &&
+			mandatoryFields[fieldIndex] == "virtual_service_id" {
+			// injecting fake ALB Virtual Service ID
+			templateFields = templateFields + `virtual_service_id = "urn:vcloud:loadBalancerVirtualService:00000000-a0b9-410a-96c6-3f56ecc93ea1"` + "\n"
+		}
+
 		if (dataSourceName == "vcd_org_saml" ||
 			dataSourceName == "vcd_org_saml_metadata" ||
 			dataSourceName == "vcd_org_ldap" ||
@@ -373,6 +412,7 @@ func addMandatoryParams(dataSourceName string, mandatoryFields []string, t *test
 			testParamsNotEmpty(t, StringMap{"VCD.Catalog.Name": testConfig.VCD.Catalog.Name})
 			templateFields = templateFields + `catalog = "` + testConfig.VCD.Catalog.Name + `"` + "\n"
 		case "catalog_id":
+			if dataSourceName != "vcd_catalog_access_control" {
 			testParamsNotEmpty(t, StringMap{
 				"VCD.Org":          testConfig.VCD.Org,
 				"VCD.Catalog.Name": testConfig.VCD.Catalog.Name})
@@ -387,6 +427,9 @@ func addMandatoryParams(dataSourceName string, mandatoryFields []string, t *test
 				return ""
 			}
 			templateFields = templateFields + `catalog_id = "` + catalog.Catalog.ID + `"` + "\n"
+			} else {
+				templateFields = templateFields + `catalog_id = "urn:vcloud:catalog:00010000-1432-4e67-a312-100000000abc"` + "\n"
+			}
 		case "vdc_id":
 			testParamsNotEmpty(t, StringMap{
 				"VCD.Org": testConfig.VCD.Org,
@@ -484,6 +527,8 @@ func addMandatoryParams(dataSourceName string, mandatoryFields []string, t *test
 			templateFields = templateFields + `ip_space_id = "urn:vcloud:ipSpace:90337fee-f332-40f2-a124-96e890eb1522"` + "\n"
 		case "external_network_id":
 			templateFields = templateFields + `external_network_id = "urn:vcloud:network:74804d82-a58f-4714-be84-75c178751ab0"` + "\n"
+		case "api_filter_id":
+			templateFields = templateFields + `api_filter_id = "urn:vcloud:apiFilter:74804d82-a58f-4714-be84-75c178751ab0"` + "\n"
 		}
 	}
 
