@@ -107,29 +107,6 @@ type TestConfig struct {
 		UseVcdConnectionCache    bool   `json:"useVcdConnectionCache"`
 		MaxRetryTimeout          int    `json:"maxRetryTimeout"`
 	} `json:"provider"`
-	Tm struct {
-		Org            string `json:"org"` // temporary field to make skipIfNotTm work
-		CreateRegion   bool   `json:"createRegion"`
-		Region         string `json:"region"`
-		StorageClass   string `json:"storageClass"`
-		Vdc            string `json:"vdc"`
-		ContentLibrary string `json:"contentLibrary"`
-
-		CreateNsxtManager   bool   `json:"createNsxtManager"`
-		NsxtManagerUsername string `json:"nsxtManagerUsername"`
-		NsxtManagerPassword string `json:"nsxtManagerPassword"`
-		NsxtManagerUrl      string `json:"nsxtManagerUrl"`
-		NsxtEdgeCluster     string `json:"nsxtEdgeCluster"`
-		NsxtTier0Gateway    string `json:"nsxtTier0Gateway"`
-
-		CreateVcenter         bool   `json:"createVcenter"`
-		VcenterUsername       string `json:"vcenterUsername"`
-		VcenterPassword       string `json:"vcenterPassword"`
-		VcenterUrl            string `json:"vcenterUrl"`
-		VcenterStorageProfile string `json:"vcenterStorageProfile"`
-		VcenterSupervisor     string `json:"vcenterSupervisor"`
-		VcenterSupervisorZone string `json:"vcenterSupervisorZone"`
-	} `json:"tm,omitempty"`
 	VCD struct {
 		Org         string `json:"org"`
 		Vdc         string `json:"vdc"`
@@ -436,12 +413,6 @@ func usingSysAdmin() bool {
 func skipIfNotSysAdmin(t *testing.T) {
 	if !usingSysAdmin() {
 		t.Skip(t.Name() + " requires system admin privileges")
-	}
-}
-
-func skipIfNotTm(t *testing.T) {
-	if checkVersion(testConfig.Provider.ApiVersion, "< 40.0") {
-		t.Skip(t.Name() + " requires 'tm'")
 	}
 }
 

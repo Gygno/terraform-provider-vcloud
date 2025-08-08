@@ -551,57 +551,57 @@ func setExternalNetworkV2Data(d *schema.ResourceData, net *types.ExternalNetwork
 	if err != nil {
 		return fmt.Errorf("error setting 'ip_scope' block: %s", err)
 	}
+	if net.NetworkBackings.Values != nil {
+		// Switch on first value of backing ID. If it is NSX-T - it can be only one block (limited by schema).
+		// NSX-V can have more than one
+		switch net.NetworkBackings.Values[0].BackingTypeValue {
+		// Some versions of VCD behave strangely in API. They do accept a parameter of types.ExternalNetworkBackingTypeNetwork
+		// as it was always the case, but in response they do return "PORTGROUP".
+		case types.ExternalNetworkBackingDvPortgroup, types.ExternalNetworkBackingTypeNetwork, "PORTGROUP":
+			backingInterface := make([]interface{}, len(net.NetworkBackings.Values))
+			for backingIndex := range net.NetworkBackings.Values {
+				backing := net.NetworkBackings.Values[backingIndex]
+				backingMap := make(map[string]interface{})
+				backingMap["vcenter_id"] = backing.NetworkProvider.ID
+				backingMap["portgroup_id"] = backing.BackingID
 
-	// Switch on first value of backing ID. If it is NSX-T - it can be only one block (limited by schema).
-	// NSX-V can have more than one
-	switch net.NetworkBackings.Values[0].BackingTypeValue {
-	// Some versions of VCD behave strangely in API. They do accept a parameter of types.ExternalNetworkBackingTypeNetwork
-	// as it was always the case, but in response they do return "PORTGROUP".
-	case types.ExternalNetworkBackingDvPortgroup, types.ExternalNetworkBackingTypeNetwork, "PORTGROUP":
-		backingInterface := make([]interface{}, len(net.NetworkBackings.Values))
-		for backingIndex := range net.NetworkBackings.Values {
-			backing := net.NetworkBackings.Values[backingIndex]
+				backingInterface[backingIndex] = backingMap
+
+			}
+			backingSet := schema.NewSet(schema.HashResource(networkV2VsphereNetwork), backingInterface)
+			err := d.Set("vsphere_network", backingSet)
+			if err != nil {
+				return fmt.Errorf("error setting 'vsphere_network' block: %s", err)
+			}
+
+		case types.ExternalNetworkBackingTypeNsxtTier0Router, types.ExternalNetworkBackingTypeNsxtVrfTier0Router:
+			backingInterface := make([]interface{}, 1)
+			backing := net.NetworkBackings.Values[0]
 			backingMap := make(map[string]interface{})
-			backingMap["vcenter_id"] = backing.NetworkProvider.ID
-			backingMap["portgroup_id"] = backing.BackingID
+			backingMap["nsxt_manager_id"] = backing.NetworkProvider.ID
+			backingMap["nsxt_tier0_router_id"] = backing.BackingID
 
-			backingInterface[backingIndex] = backingMap
+			backingInterface[0] = backingMap
+			err := d.Set("nsxt_network", backingInterface)
+			if err != nil {
+				return fmt.Errorf("error setting 'nsxt_network' block: %s", err)
+			}
+		case types.ExternalNetworkBackingTypeNsxtSegment:
+			backingInterface := make([]interface{}, 1)
+			backing := net.NetworkBackings.Values[0]
+			backingMap := make(map[string]interface{})
+			backingMap["nsxt_manager_id"] = backing.NetworkProvider.ID
+			backingMap["nsxt_segment_name"] = backing.Name
 
+			backingInterface[0] = backingMap
+			err := d.Set("nsxt_network", backingInterface)
+			if err != nil {
+				return fmt.Errorf("error setting 'nsxt_network' block: %s", err)
+			}
+
+		default:
+			return fmt.Errorf("unrecognized network backing type: %s", net.NetworkBackings.Values[0].BackingType)
 		}
-		backingSet := schema.NewSet(schema.HashResource(networkV2VsphereNetwork), backingInterface)
-		err := d.Set("vsphere_network", backingSet)
-		if err != nil {
-			return fmt.Errorf("error setting 'vsphere_network' block: %s", err)
-		}
-
-	case types.ExternalNetworkBackingTypeNsxtTier0Router, types.ExternalNetworkBackingTypeNsxtVrfTier0Router:
-		backingInterface := make([]interface{}, 1)
-		backing := net.NetworkBackings.Values[0]
-		backingMap := make(map[string]interface{})
-		backingMap["nsxt_manager_id"] = backing.NetworkProvider.ID
-		backingMap["nsxt_tier0_router_id"] = backing.BackingID
-
-		backingInterface[0] = backingMap
-		err := d.Set("nsxt_network", backingInterface)
-		if err != nil {
-			return fmt.Errorf("error setting 'nsxt_network' block: %s", err)
-		}
-	case types.ExternalNetworkBackingTypeNsxtSegment:
-		backingInterface := make([]interface{}, 1)
-		backing := net.NetworkBackings.Values[0]
-		backingMap := make(map[string]interface{})
-		backingMap["nsxt_manager_id"] = backing.NetworkProvider.ID
-		backingMap["nsxt_segment_name"] = backing.Name
-
-		backingInterface[0] = backingMap
-		err := d.Set("nsxt_network", backingInterface)
-		if err != nil {
-			return fmt.Errorf("error setting 'nsxt_network' block: %s", err)
-		}
-
-	default:
-		return fmt.Errorf("unrecognized network backing type: %s", net.NetworkBackings.Values[0].BackingType)
 	}
-
 	return nil
 }
